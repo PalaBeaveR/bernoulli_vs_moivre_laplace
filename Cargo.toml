@@ -1,0 +1,16 @@
+[package]
+name = "bernoulli_vs_moivre_laplace"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fraction = "0.13.1"
+time = { version = "0.3.28", features = ["wasm-bindgen"] }
+tracing = { version = "0.1.37", features = ["attributes"] }
+tracing-subscriber = "0.3.17"
+web-sys = { version = "0.3.64", features = ["console", "Performance", "Window"] }
+
+[target.wasm32-unknown-unknown]
+runner = "wasm-server-runner"

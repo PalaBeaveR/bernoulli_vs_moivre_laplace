@@ -1,123 +1,79 @@
-use std::{
-    f64::consts::{E, PI},
-    fmt::Display,
-    ops::Div,
-};
+use gloo_worker::Worker;
+use serde::{Deserialize, Serialize};
+use solver::{bernoulli, SolverResult, moivre_laplace};
 
-use fraction::{
-    BigUint, Decimal, Fraction, GenericDecimal,
-    GenericFraction, ToPrimitive,
-};
+pub struct BernoulliSolver;
+pub struct MoivreLaplaceSolver;
 
-fn pow_fraction(
-    fract: GenericFraction<BigUint>,
-    power: u32,
-) -> GenericFraction<BigUint> {
-    GenericFraction::new(
-        fract.numer().unwrap().pow(power),
-        fract.denom().unwrap().pow(power),
-    )
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SolverRequest {
+    pub total: u32,
+    pub required: u32,
+    pub odds: (u32, u32),
 }
 
-use time::Duration;
-use tracing::{debug, debug_span, instrument, span};
-use web_sys::{Performance, Window};
+impl Worker for BernoulliSolver {
+    type Message = ();
 
-pub struct BernoulliResult {
-    probability: GenericFraction<BigUint>,
-    took: Duration,
-}
+    type Input = SolverRequest;
 
-impl Display for BernoulliResult {
-    fn fmt(
-        &self,
-        f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        write!(
-            f,
-            "probability: {:.1000}; time taken: {}",
-            self.probability, self.took
+    type Output = SolverResult;
+
+    fn create(
+        scope: &gloo_worker::WorkerScope<Self>,
+    ) -> Self {
+        Self {}
+    }
+
+    fn update(
+        &mut self,
+        scope: &gloo_worker::WorkerScope<Self>,
+        msg: Self::Message,
+    ) {
+    }
+
+    fn received(
+        &mut self,
+        scope: &gloo_worker::WorkerScope<Self>,
+        msg: Self::Input,
+        id: gloo_worker::HandlerId,
+    ) {
+        scope.respond(
+            id,
+            bernoulli(msg.total, msg.required, msg.odds),
         )
     }
 }
 
-pub fn bernoulli(
-    total_tests: u32,      // n
-    required_to_pass: u32, // k
-    pass_probability: GenericFraction<BigUint>, // p
-) -> BernoulliResult {
-    let performance =
-        web_sys::window().unwrap().performance().unwrap();
+impl Worker for MoivreLaplaceSolver {
+    type Message = ();
 
-    let fail_probability = GenericFraction::new(
-        BigUint::from(1 as u32),
-        BigUint::from(1 as u32),
-    ) - pass_probability.clone(); // q
+    type Input = SolverRequest;
 
-    let now = performance.now();
+    type Output = SolverResult;
 
-    let amount_difference = total_tests - required_to_pass;
-    let combinations = GenericFraction::new(
-        (amount_difference + 1..=total_tests)
-            .map(BigUint::from)
-            .product::<BigUint>(),
-        (1..=required_to_pass)
-            .map(BigUint::from)
-            .product::<BigUint>()
-            * (1..=amount_difference)
-                .map(BigUint::from)
-                .product::<BigUint>(),
-    );
-
-    let probability = combinations
-        * pow_fraction(pass_probability, required_to_pass)
-        * pow_fraction(
-            fail_probability,
-            total_tests - required_to_pass,
-        );
-
-    let elapsed = performance.now() - now;
-
-    BernoulliResult {
-        probability,
-        took: Duration::milliseconds(elapsed as i64),
+    fn create(
+        scope: &gloo_worker::WorkerScope<Self>,
+    ) -> Self {
+        Self {}
     }
-}
 
-pub struct MoivreLaplaceResult {
-    pub probability: f64,
-    took: Duration,
-}
+    fn update(
+        &mut self,
+        scope: &gloo_worker::WorkerScope<Self>,
+        msg: Self::Message,
+    ) {
+    }
 
-
-impl Display for MoivreLaplaceResult {
-    fn fmt(
-        &self,
-        f: &mut std::fmt::Formatter<'_>,
-    ) -> std::fmt::Result {
-        write!(
-            f,
-            "probability: {}; time taken: {}",
-            self.probability, self.took
+    fn received(
+        &mut self,
+        scope: &gloo_worker::WorkerScope<Self>,
+        msg: Self::Input,
+        id: gloo_worker::HandlerId,
+    ) {
+        scope.respond(
+            id,
+            moivre_laplace(msg.total, msg.required, msg.odds),
         )
     }
-}
-
-pub fn moivre_laplace(
-    n: u32, // n
-    k: u32, // k
-    p: f64, // p
-) -> MoivreLaplaceResult {
-    let n = n as f64;
-    let k = k as f64;
-    let performance =
-        web_sys::window().unwrap().performance().unwrap();
-
-    let now = performance.now();
-    let q = 1. - p; // q
-    let probability = 1. / (2. * PI * n * p * q).sqrt()
-        * E.powf(-((k - n * p).powi(2) / (2. * n * p * q)));
-    let elapsed = performance.now() - now;
-
-    MoivreLaplaceResult { probability, took: Duration::milliseconds(elapsed as i64) }
 }

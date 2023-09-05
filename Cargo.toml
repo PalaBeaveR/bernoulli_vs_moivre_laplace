@@ -1,16 +1,15 @@
 [package]
-name = "bernoulli_vs_moivre_laplace"
+name = "bernoulli-vs-moivre-laplace"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fraction = "0.13.1"
-time = { version = "0.3.28", features = ["wasm-bindgen"] }
-tracing = { version = "0.1.37", features = ["attributes"] }
-tracing-subscriber = "0.3.17"
-web-sys = { version = "0.3.64", features = ["console", "Performance", "Window"] }
-
-[target.wasm32-unknown-unknown]
-runner = "wasm-server-runner"
+console_error_panic_hook = "0.1.7"
+gloo-worker = "0.4.0"
+leptos = { version = "0.5.0-beta2", features = ["nightly", "csr"] }
+serde = { version = "1.0.188", features = ["derive"] }
+solver = { path = "solver" }
+wasm-bindgen = "0.2.87"
+web-sys = { version = "0.3.64", features = ["HtmlDivElement"] }

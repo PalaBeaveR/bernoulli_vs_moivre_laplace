@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Bernoulli vs Moivre Laplace</title>
+	<link data-trunk rel="tailwind-css" href="src/tailwind.css" />
+	<base data-trunk-public-url />
+</head>
+
+<body>
+
+	<link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z" data-bin="app" data-type="main" />
+	<link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z" data-bin="bernoulli" data-type="worker" />
+	<link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z" data-bin="moivre_laplace" data-type="worker" />
+</body>
+
+</html>

@@ -1,3 +1,4 @@
+use fraction::BigFraction;
 use gloo_worker::Spawnable;
 use leptos::svg::view;
 use leptos::ReadSignal;
@@ -11,12 +12,15 @@ use leptos::{
     leptos_dom::console_log, view, IntoView, SignalGet,
     SignalGetUntracked, SignalSet, SignalUpdate,
 };
+use num_bigint::BigUint;
+use num_rational::{BigRational, Ratio};
 use serde::{Deserialize, Serialize};
 use solver::{bernoulli, SolverResult};
 
 use bernoulli_vs_moivre_laplace::{
     BernoulliSolver, MoivreLaplaceSolver, SolverRequest,
 };
+use web_time::Instant;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -43,6 +47,9 @@ pub fn App() -> impl IntoView {
     let moivre_laplace_solver =
         MoivreLaplaceSolver::spawner()
             .callback(move |result| {
+                let now = Instant::now();
+                leptos::log!("{}", serde_json::to_string(&result).unwrap());
+                leptos::log!("{}", now.elapsed().as_millis());
                 set_moivre_laplace_result(Some(result));
                 set_moivre_laplace_running(false);
             })
@@ -57,6 +64,7 @@ pub fn App() -> impl IntoView {
         pass_numerator: 80.into(),
         fail_numerator: 20.into(),
         precision: 1000.into(),
+        iterations: 300.into(),
     };
 
     let pass_updated = store_value(false);
@@ -129,6 +137,7 @@ pub fn App() -> impl IntoView {
                         variables.pass_numerator.get_untracked(),
                         variables.denominator.get_untracked(),
                     ),
+                    iterations: variables.iterations.get_untracked()
                 };
                 bernoulli_solver.send(request.clone());
                 set_bernoulli_running(true);
@@ -165,6 +174,7 @@ pub struct Variables {
     pub pass_numerator: RwSignal<u32>,
     pub fail_numerator: RwSignal<u32>,
     pub precision: RwSignal<u32>,
+    pub iterations: RwSignal<u32>,
 }
 
 #[component]
@@ -174,29 +184,30 @@ fn Variables(variables: Variables) -> impl IntoView {
             <Variable
                 value=variables.total_experiments
                 id="total_experiments"
-                label="Total Experiments"
+                label="Total Experiments(n)"
                 block=true
             />
             <Variable
                 value=variables.required_to_pass
                 id="required_to_pass"
-                label="Required To Pass"
+                label="Required To Pass(k)"
                 block=true
             />
             <FractionVariable
                 numerator=variables.pass_numerator
                 denominator=variables.denominator
                 block=true
-                label="Pass Probability"
+                label="Pass Probability(p)"
             />
             <FractionVariable
                 numerator=variables.fail_numerator
                 denominator=variables.denominator
                 block=true
-                label="Fail Probability"
+                label="Fail Probability(q)"
             />
 
-            <Variable value=variables.precision id="precision" label="Precision" block=true/>
+            <Variable value=variables.precision id="precision" label="Precision(Numbers after the dot in the result)" block=true/>
+            <Variable value=variables.iterations id="iterations" label="Iterations(only affects moivre laplace. Bigger is slower but more accurate)" block=true/>
         </div>
     }
 }
@@ -270,6 +281,11 @@ pub fn FractionVariable(
     }
 }
 
+fn to_fraction(ratio: Ratio<BigUint>) -> BigFraction {
+    let (numer, denum) = ratio.into();
+    BigFraction::new(numer, denum)
+}
+
 #[component]
 pub fn ResultDisplay(
     running: ReadSignal<bool>,
@@ -295,7 +311,7 @@ pub fn ResultDisplay(
             <p class="break-words">
                 {move || {
                     let precision = precision.get() as usize;
-                    format!("{:.precision$}", result.get().unwrap_or_default().probability)
+                    format!("{:.precision$}", to_fraction(result.get().unwrap_or_default().probability))
                 }}
 
             </p>
@@ -308,7 +324,7 @@ fn main() {
 
     leptos::mount_to_body(|| {
         view! {
-            <div class="w-screen h-screen flex flex-col">
+            <div class="w-screen h-screen flex flex-col overflow-x-hidden">
                 <App/>
             </div>
         }

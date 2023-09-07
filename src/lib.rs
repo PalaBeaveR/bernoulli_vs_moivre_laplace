@@ -10,6 +10,7 @@ pub struct SolverRequest {
     pub total: u32,
     pub required: u32,
     pub odds: (u32, u32),
+    pub iterations: u32
 }
 
 impl Worker for BernoulliSolver {
@@ -73,7 +74,7 @@ impl Worker for MoivreLaplaceSolver {
     ) {
         scope.respond(
             id,
-            moivre_laplace(msg.total, msg.required, msg.odds),
+            moivre_laplace(msg.total, msg.required, msg.odds, msg.iterations),
         )
     }
 }

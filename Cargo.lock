@@ -457,6 +457,8 @@ checksum = "3027ae1df8d41b4bed2241c8fdad4acc1e7af60c8e17743534b545e77182d678"
 dependencies = [
  "lazy_static",
  "num",
+ "serde",
+ "serde_derive",
 ]
 
 [[package]]
@@ -1257,6 +1259,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ba157ca0885411de85d6ca030ba7e2a83a28636056c7c699b07c8b6f7383214"
 dependencies = [
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -2036,9 +2039,11 @@ dependencies = [
 name = "solver"
 version = "0.1.0"
 dependencies = [
+ "fraction",
  "js-sys",
  "leptos 0.4.10",
  "num-bigint",
+ "num-integer",
  "num-rational",
  "serde",
  "time",

@@ -1,6 +1,6 @@
 use fraction::{Fraction, GenericFraction};
 use solver::{
-    bernoulli, continued_fraction, moivre_laplace,
+    bernoulli, moivre_laplace, moivre_laplace_smart
 };
 use tracing::Level;
 use wasm_bindgen::JsValue;
@@ -25,5 +25,5 @@ fn main() {
     //         (80, 100)
     //     )
     // ));
-    log(format!("{}", moivre_laplace(50, 10, (80, 100), 100)));
+    log(format!("{:.100}", moivre_laplace_smart(100, 20, (80, 100), 100, 20).probability));
 }

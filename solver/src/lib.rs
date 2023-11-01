@@ -134,7 +134,6 @@ fn diff(
     a: &GenericFraction<BigUint>,
     b: &GenericFraction<BigUint>,
 ) -> GenericFraction<BigUint> {
-    leptos::log!("a: {} b: {}", a, b);
     if a > b {
         a - b
     } else {
@@ -147,6 +146,7 @@ pub fn moivre_laplace(
     k: u32,                               // k
     (pass_numer, pass_denom): (u32, u32), // p
     iterations: u32,
+    sqrt_iterations: usize
 ) -> SolverResult {
     let now = Instant::now();
     let n = fr(n);
@@ -167,7 +167,7 @@ pub fn moivre_laplace(
         exp(k_minus_np_squared / two_npq, iterations);
 
     let probability =
-        fr_flip(fr_sqrt(&(&rat_num(2u32) * &pi) * &npq, 5))
+        fr_flip(fr_sqrt(&(&rat_num(2u32) * &pi) * &npq, sqrt_iterations))
             * fr_flip(ml_e);
 
     let elapsed = now.elapsed();
@@ -187,6 +187,7 @@ pub fn moivre_laplace_smart(
     (pass_numer, pass_denom): (u32, u32), // p
     precision: usize,
     stable_amount: usize,
+    sqrt_iterations: usize
 ) -> SolverResult {
     let now = Instant::now();
     let n = fr(n);
@@ -206,7 +207,7 @@ pub fn moivre_laplace_smart(
     let (iterations, ml_e) = finish_moivre(
         k_minus_np_squared / two_npq,
         precision,
-        fr_flip(fr_sqrt(&(&rat_num(2u32) * &pi) * &npq, 5)),
+        fr_flip(fr_sqrt(&(&rat_num(2u32) * &pi) * &npq, sqrt_iterations)),
         stable_amount,
     );
 

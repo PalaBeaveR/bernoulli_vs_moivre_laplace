@@ -16,6 +16,7 @@ pub struct SolverRequest {
     pub iterations: u32,
     pub stable_amount: usize,
     pub precision: usize,
+    pub sqrt_iterations: usize
 }
 
 impl Worker for BernoulliSolver {
@@ -92,6 +93,7 @@ impl Worker for MoivreLaplaceSolver {
                         msg.required,
                         msg.odds,
                         msg.iterations,
+                        msg.sqrt_iterations
                     )
                 }
                 MoivreLaplaceMode::AutomaticIterations => {
@@ -101,6 +103,7 @@ impl Worker for MoivreLaplaceSolver {
                         msg.odds,
                         msg.precision,
                         msg.stable_amount,
+                        msg.sqrt_iterations
                     )
                 }
             },

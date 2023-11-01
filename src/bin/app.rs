@@ -71,6 +71,7 @@ pub fn App() -> impl IntoView {
         iterations: 300.into(),
         automatic_iterations: false.into(),
         stable_amount: 5.into(),
+        sqrt_iterations: 10.into()
     };
 
     let np = Signal::derive(move || {
@@ -187,6 +188,8 @@ pub fn App() -> impl IntoView {
                         precision: variables.precision.get_untracked(),
                         iterations: variables.iterations.get_untracked(),
                         stable_amount: variables.stable_amount.get_untracked(),
+                        sqrt_iterations: variables.sqrt_iterations.get_untracked(),
+
                     };
                     bernoulli_solver.send(request.clone());
                     set_bernoulli_running(true);
@@ -239,6 +242,7 @@ pub struct Variables {
     pub iterations: RwSignal<u32>,
     pub stable_amount: RwSignal<usize>,
     pub automatic_iterations: RwSignal<bool>,
+    pub sqrt_iterations: RwSignal<usize>
 }
 
 #[derive(Clone, Copy)]
@@ -305,6 +309,13 @@ fn Variables(variables: Variables) -> impl IntoView {
                 block=true
             />
 
+            <Variable
+                value=variables.sqrt_iterations
+                id="sqrt"
+                label="Sqrt Iterations(exponential time to compute)"
+                block=true
+            />
+
             {move || {
                 if variables.automatic_iterations.get() {
                     view! {
@@ -320,7 +331,7 @@ fn Variables(variables: Variables) -> impl IntoView {
                         <Variable
                             value=variables.iterations
                             id="iterations"
-                            label="Iterations(only affects moivre laplace. Bigger is slower but more accurate)"
+                            label="Exponent Iterations(only affects moivre laplace. Bigger is slower but more accurate)"
                             block=true
                         />
                     }

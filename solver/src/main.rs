@@ -10,20 +10,23 @@ pub fn log<T: Into<JsValue>>(value: T) {
     web_sys::console::log_1(&value.into());
 }
 
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 #[cfg(not(target_family = "wasm"))]
 pub fn log<T: Display>(value: T) {
     println!("{}", value);
 }
 
 fn main() {
-    // log(format!(
-    //     "{}",
-    //     bernoulli(
-    //         500,
-    //         400,
-    //         (80, 100)
-    //     )
-    // ));
-    log(format!("{:.100}", moivre_laplace_smart(100, 20, (80, 100), 100, 20).probability));
+    let n = 100;
+    let p = 8;
+
+    let mut csv = String::new();
+    writeln!(csv, "K,MV,B").unwrap();
+
+    for k in 1..n {
+        writeln!(csv, "{k},{:.100},{:.100}", moivre_laplace_smart(n, k, (p, 10), 100, 15, 12).probability, bernoulli(n, k, (p, 10)).probability).unwrap();
+        println!("k = {k} DONE");
+    }
+
+    std::fs::write("mv.csv", csv).unwrap();
 }

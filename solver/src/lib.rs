@@ -1,30 +1,12 @@
-use std::{
-    f64::consts::{E, PI},
-    fmt::Display,
-    ops::Div,
-};
+use num_bigint::BigUint;
 
-use num_bigint::{BigInt, BigUint};
+use fraction::{BigFraction, GenericFraction};
 
-fn pow_fraction(
-    fract: GenericFraction<BigUint>,
-    power: u32,
-) -> GenericFraction<BigUint> {
-    let GenericFraction::Rational(_, ratio) = fract else {
-        panic!("Fraction is not rational")
-    };
-
-    let (numer, denom) = ratio.into();
-    GenericFraction::new(numer.pow(power), denom.pow(power))
-}
-
-use fraction::GenericFraction;
-use js_sys::WebAssembly::Global;
+use num_integer::Integer;
 use num_rational::Ratio;
 use serde::{Deserialize, Serialize};
 use time::Duration;
-use tracing::{debug, debug_span, instrument, span};
-use web_sys::{Performance, Window};
+
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct SolverResult {
     pub probability: GenericFraction<BigUint>,
@@ -35,38 +17,52 @@ pub struct SolverResult {
 use web_time::Instant;
 
 pub fn bernoulli(
-    total_tests: u32,                     // n
-    required_to_pass: u32,                // k
-    (pass_numer, pass_denom): (u32, u32), // p
+    experiments: u32,
+    positive_outcomes: u32,
+    positive_probability: FR,
 ) -> SolverResult {
-    let pass_probability = rat(pass_numer, pass_denom);
-
-    let fail_probability =
-        &rat_num(1u32) - &pass_probability; // q
-
     let now = Instant::now();
 
-    let amount_difference = total_tests - required_to_pass;
-    let combinations = rat(
-        (amount_difference + 1..=total_tests)
-            .map(BigUint::from)
-            .product::<BigUint>(),
-        (1..=required_to_pass)
-            .map(BigUint::from)
-            .product::<BigUint>(),
-    );
+    let (positive_numer, prob_denom) =
+        positive_probability.into();
 
-    let probability = &combinations
-        * pow_fraction(pass_probability, required_to_pass)
-        * pow_fraction(
-            fail_probability,
-            total_tests - required_to_pass,
-        );
+    let negative_numer = &prob_denom - &positive_numer;
+
+    // Picking the biggest of the two factorials in the denumenator of combinations
+    let experiment_diff = (experiments - positive_outcomes)
+        .max(positive_outcomes);
+
+    // Simplifying the factorial in the numerator of combinations
+    let combinations_numer = (experiment_diff + 1
+        ..=experiments)
+        .map(BigUint::from)
+        .product::<BigUint>();
+
+    // Computing the remaining factorial in the denominator
+    let combinations_denom = (1..=(experiments
+        - experiment_diff))
+        .map(BigUint::from)
+        .product::<BigUint>();
+
+    let negative_pow = experiments - positive_outcomes;
+
+    // Multiplying combinations, p^k, q^n-k together
+    let probability = Ratio::new_raw(
+        combinations_numer
+            * positive_numer.pow(positive_outcomes)
+            * negative_numer.pow(negative_pow),
+        combinations_denom
+            * prob_denom.pow(positive_outcomes)
+            * prob_denom.pow(negative_pow),
+    );
 
     let elapsed = now.elapsed();
 
     SolverResult {
-        probability,
+        probability: GenericFraction::Rational(
+            fraction::Sign::Plus,
+            probability,
+        ),
         took: Duration::microseconds(
             elapsed.as_micros().try_into().unwrap(),
         ),
@@ -74,270 +70,150 @@ pub fn bernoulli(
     }
 }
 
-#[inline]
-fn fr<T: Into<BigUint>>(
-    num: T,
-) -> GenericFraction<BigUint> {
-    GenericFraction::from(num.into())
-}
+type FR = Ratio<BigUint>;
 
-fn fr_sqrt(
-    fract: GenericFraction<BigUint>,
-    iterations: usize,
-) -> GenericFraction<BigUint> {
-    let mut approx = fract.clone();
-
-    for _ in 0..iterations {
-        approx =
-            (&approx + (&fract / &approx)) / rat_num(2u32);
-    }
-
-    approx
-}
-
-fn fr_flip(
-    fract: GenericFraction<BigUint>,
-) -> GenericFraction<BigUint> {
-    let GenericFraction::Rational(_, ratio) = fract else {
-        panic!("Fraction is not rational")
-    };
-
-    let (numer, denom) = ratio.into();
-
-    GenericFraction::new_raw(denom, numer)
-}
-
-#[inline]
-fn rat<T: Into<BigUint>>(
-    numer: T,
-    denom: T,
-) -> GenericFraction<BigUint> {
-    GenericFraction::new(numer.into(), denom.into())
-}
-
-#[inline]
-fn rat_raw<T: Into<BigUint>>(
-    numer: T,
-    denom: T,
-) -> GenericFraction<BigUint> {
-    GenericFraction::new_raw(numer.into(), denom.into())
-}
-
-#[inline]
-fn rat_num<T: Into<BigUint>>(
-    num: T,
-) -> GenericFraction<BigUint> {
-    GenericFraction::new_raw(num.into(), Into::into(1u32))
-}
-
-fn diff(
-    a: &GenericFraction<BigUint>,
-    b: &GenericFraction<BigUint>,
-) -> GenericFraction<BigUint> {
-    if a > b {
-        a - b
-    } else {
-        b - a
-    }
-}
-
+// fraction manipulations were done by hand for optimization reasons since the library likes to
+// reduce the fraction whenever possible which turned out to slow down the function by a
+// substantial margin
 pub fn moivre_laplace(
-    n: u32,                               // n
-    k: u32,                               // k
-    (pass_numer, pass_denom): (u32, u32), // p
-    iterations: u32,
-    sqrt_iterations: usize
+    experiments: u32,
+    positive_outcomes: u32,
+    positive_probability: FR,
+    exponentiation_iterations: usize,
+    square_root_iterations: usize,
 ) -> SolverResult {
     let now = Instant::now();
-    let n = fr(n);
-    let k = fr(k);
-    let p = rat(pass_numer, pass_denom);
-    let pi = rat_raw(
-        30_246_273_033_735_921u128,
-        9_627_687_726_852_338u128,
-    );
 
-    let q = &rat_num(1u32) - &p; // q
-    let np = &n * &p;
-    let npq = &np * &q;
+    let experiments: BigUint = experiments.into();
+    let positive_outcomes: BigUint =
+        positive_outcomes.into();
+    let (positive_numer, prob_denom) =
+        positive_probability.into();
+    let negative_numer = &prob_denom - &positive_numer;
 
-    let k_minus_np_squared = pow_fraction(diff(&k, &np), 2);
-    let two_npq = &rat_num(2u32) * &npq;
-    let ml_e =
-        exp(k_minus_np_squared / two_npq, iterations);
+    let np = experiments * positive_numer;
+    let two_npq_numer = 2u32 * &np * negative_numer;
+    let two_npq_denom = &prob_denom * &prob_denom;
 
-    let probability =
-        fr_flip(fr_sqrt(&(&rat_num(2u32) * &pi) * &npq, sqrt_iterations))
-            * fr_flip(ml_e);
+    // Since we need to subtract np from k, we also need to find the least common denominator and
+    // scale numerators accordingly. Since denominator of k is equal to 1 we can just multiply it's
+    // numerator by np's denominator and get the appropriate value
+    let scaled_positive_outcomes =
+        positive_outcomes * &prob_denom;
 
-    let elapsed = now.elapsed();
-
-    SolverResult {
-        probability,
-        took: Duration::microseconds(
-            elapsed.as_micros().try_into().unwrap(),
-        ),
-        iterations
-    }
-}
-
-pub fn moivre_laplace_smart(
-    n: u32,                               // n
-    k: u32,                               // k
-    (pass_numer, pass_denom): (u32, u32), // p
-    precision: usize,
-    stable_amount: usize,
-    sqrt_iterations: usize
-) -> SolverResult {
-    let now = Instant::now();
-    let n = fr(n);
-    let k = fr(k);
-    let p = rat(pass_numer, pass_denom);
-    let pi = rat_raw(
-        30_246_273_033_735_921u128,
-        9_627_687_726_852_338u128,
-    );
-
-    let q = &rat_num(1u32) - &p; // q
-    let np = &n * &p;
-    let npq = &np * &q;
-
-    let k_minus_np_squared = pow_fraction(diff(&k, &np), 2);
-    let two_npq = &rat_num(2u32) * &npq;
-    let (iterations, ml_e) = finish_moivre(
-        k_minus_np_squared / two_npq,
-        precision,
-        fr_flip(fr_sqrt(&(&rat_num(2u32) * &pi) * &npq, sqrt_iterations)),
-        stable_amount,
-    );
-
-    let elapsed = now.elapsed();
-
-    SolverResult {
-        probability: ml_e,
-        took: Duration::microseconds(
-            elapsed.as_micros().try_into().unwrap(),
-        ),
-        iterations
-    }
-}
-
-pub fn continued_fraction(
-    numbers: &[u32],
-) -> GenericFraction<BigUint> {
-    match numbers.len() {
-        x if x <= 0 => fr(0u32),
-        1 => fr(numbers[0]),
-        _ => {
-            fr(numbers[0])
-                + fr_flip(continued_fraction(&numbers[1..]))
-        }
-    }
-}
-
-fn factorial(num: BigUint) -> BigUint {
-    let one = BigUint::from(1u32);
-    if num <= one {
-        one
+    // This if condition is here to prevent underflowing as we are working with unsigned numbers
+    let exp_numer = if scaled_positive_outcomes >= np {
+        scaled_positive_outcomes - np
     } else {
-        factorial(&num - one) * &num
+        np - scaled_positive_outcomes
+    }
+    .pow(2)
+        * &two_npq_denom;
+
+    let exp_denom = (&prob_denom).pow(2) * &two_npq_numer;
+
+    let (exp_numer, exp_denom) = exp(
+        exp_numer,
+        exp_denom,
+        exponentiation_iterations,
+    );
+
+    // These big u128 numbers are an approximation of pi in fraction form
+    let root_numer =
+        two_npq_numer * 30_246_273_033_735_921u128;
+    let root_denom =
+        two_npq_denom * 9_627_687_726_852_338u128;
+
+    // function sqrt returns values in order numer, denom. But since we need 1 over sqrt, we just
+    // swap around the numer and denom
+    let (left_denom, left_numer) = sqrt(
+        root_numer,
+        root_denom,
+        square_root_iterations,
+    );
+
+    let probability = Ratio::new_raw(
+        left_numer * exp_denom,
+        left_denom * exp_numer,
+    );
+
+    let elapsed = now.elapsed();
+
+    SolverResult {
+        took: Duration::microseconds(
+            elapsed.as_micros().try_into().unwrap(),
+        ),
+        probability: GenericFraction::Rational(
+            fraction::Sign::Plus,
+            probability,
+        ),
+        iterations: 0,
     }
 }
 
-fn exp(
-    fract: GenericFraction<BigUint>,
-    iterations: u32,
-) -> GenericFraction<BigUint> {
-    let mut result = rat_num(1u32);
-    for i in 1..iterations {
-        result += pow_fraction(fract.clone(), i)
-            / fr(factorial(i.into()));
-    }
-    result
-}
-
-fn finish_moivre(
-    fract: GenericFraction<BigUint>,
-    precision: usize,
-    first_part: GenericFraction<BigUint>,
-    stable_amount: usize,
-) -> (u32, GenericFraction<BigUint>) {
-    let mut leading_zeroes = 0usize;
-    let mut stable_num: String = "0".into();
-    let mut prob = rat_num(0u32);
-
-    let mut result = rat_num(1u32);
-    for i in 1.. {
-        result += pow_fraction(fract.clone(), i)
-            / fr(factorial(i.into()));
-
-        prob = &first_part / &result;
-        let decimal = format!("{:.precision$}", prob);
-        let new_leading_zeroes = decimal
-            .chars()
-            .position(|ch| ch != '0' && ch != '.')
-            .unwrap();
-
-        let num = decimal[leading_zeroes
-            ..(leading_zeroes + stable_amount)
-                .min(decimal.len())]
-            .to_string();
-
-        if new_leading_zeroes == leading_zeroes {
-            if num == stable_num {
-                return (i+1, prob);
-            }
-            stable_num = num;
-            continue;
+pub fn sqrt(
+    target_numer: BigUint,
+    target_denom: BigUint,
+    iterations: usize,
+) -> (BigUint, BigUint) {
+    let (mut guess_top, mut guess_bot) =
+        (target_numer.sqrt(), target_denom.sqrt());
+    for _ in 0..iterations {
+        let inside_top = &target_numer * &guess_bot;
+        let inside_bot = &target_denom * &guess_top;
+        (guess_top, guess_bot) = add_ratios_raw_raw(
+            guess_top, guess_bot, inside_top, inside_bot,
+        );
+        if guess_top.is_even() {
+            guess_top /= 2u32;
+        } else {
+            guess_bot *= 2u32
         }
-        leading_zeroes = new_leading_zeroes;
     }
-
-    (0, prob)
+    (guess_top, guess_bot)
 }
 
-// pub fn pi_series(iter: u32) {
-//     let mut pi: GenericFraction<BigUint> = rat_num(0u32);
-//
-//     let mut toggle = true;
-//     let k1 = 545140134u32;
-//     let k2 = 13591409u32;
-//     let k3 = 640320u32;
-//     let k4 = 100100025u32;
-//     let k5 = 327843840u32;
-//     let k6 = 53360u32;
-//
-// use num_integer::Roots;
-//     let s = rat_num(k6 * k3.sqrt());
-//
-//     for i in (0..iter) {
-//         if toggle {
-//             pi += rat(fact(6 * i) * (k2 + i*k1), fact(i).pow(3)*fact(3*i)*(8*k4*k5).pow(i));
-//         } else {
-//             pi -= rat(fact(6 * i) * (k2 + i*k1), fact(i).pow(3)*fact(3*i)*(8*k4*k5).pow(i));
-//         }
-//         toggle = !toggle;
-//
-//         println!("{:.100}", s / pi);
-//     }
-// }
+pub fn exp(
+    exponent_numer: BigUint,
+    exponent_denom: BigUint,
+    iterations: usize,
+) -> (BigUint, BigUint) {
+    let (mut acc_numer, mut acc_denum) =
+        (BigUint::from(0u32), BigUint::from(1u32));
+    for iter in 0..iterations {
+        (acc_numer, acc_denum) = add_ratios_raw_raw(
+            acc_numer,
+            acc_denum,
+            exponent_numer.pow(iter as u32),
+            exponent_denom.pow(iter as u32)
+                * factorial_new(iter.into()),
+        );
+    }
 
-fn fact(n: u32) -> u32 {
-    match n {
-        0 | 1 => 1,
-        x => x * fact(n - 1),
+    (acc_numer, acc_denum)
+}
+
+pub fn factorial_new(base: BigUint) -> BigUint {
+    if base <= BigUint::from(1u32) {
+        BigUint::from(1u32)
+    } else {
+        factorial_new(&base - &BigUint::from(1u32)) * base
     }
 }
 
-use fraction::BigFraction;
+fn add_ratios_raw_raw(
+    mut lhs_numer: BigUint,
+    lhs_denom: BigUint,
+    mut rhs_numer: BigUint,
+    rhs_denom: BigUint,
+) -> (BigUint, BigUint) {
+    let common_denom = lhs_denom.lcm(&rhs_denom);
 
-fn to_fraction(
-    ratio: GenericFraction<BigUint>,
-) -> BigFraction {
-    let GenericFraction::Rational(_, ratio) = ratio else {
-        panic!("Fraction is not rational")
-    };
+    let lhs_multiplier = &common_denom / &lhs_denom;
+    let rhs_multiplier = &common_denom / &rhs_denom;
 
-    let (numer, denom) = ratio.into();
-    BigFraction::new(numer, denom)
+    lhs_numer *= lhs_multiplier;
+    rhs_numer *= rhs_multiplier;
+
+    (lhs_numer + rhs_numer, common_denom)
 }

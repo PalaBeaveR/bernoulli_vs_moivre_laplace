@@ -1,30 +1,26 @@
 use fraction::BigFraction;
 use gloo_worker::Spawnable;
-use leptos::svg::view;
+
 use leptos::{
-    create_effect, event_target, spawn_local, store_value,
-    watch, CollectView, RwSignal,
+    create_effect, event_target, store_value, CollectView,
+    RwSignal,
 };
 use leptos::{create_rw_signal, ReadSignal, Signal};
 
 use fraction::GenericFraction;
 
 use leptos::{
-    component, create_signal, event_target_value,
-    leptos_dom::console_log, view, IntoView, SignalGet,
-    SignalGetUntracked, SignalSet, SignalUpdate,
+    component, create_signal, view, IntoView, SignalGet,
+    SignalGetUntracked, SignalSet,
 };
 use num_bigint::BigUint;
-use num_rational::{BigRational, Ratio};
-use serde::{Deserialize, Serialize};
-use solver::{bernoulli, SolverResult};
+use num_rational::Ratio;
+
+use solver::SolverResult;
 
 use bernoulli_vs_moivre_laplace::{
-    BernoulliSolver, MoivreLaplaceMode,
-    MoivreLaplaceSolver, SolverRequest,
+    BernoulliSolver, MoivreLaplaceSolver, SolverRequest,
 };
-use web_sys::HtmlInputElement;
-use web_time::Instant;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -71,7 +67,7 @@ pub fn App() -> impl IntoView {
         iterations: 300.into(),
         automatic_iterations: false.into(),
         stable_amount: 5.into(),
-        sqrt_iterations: 10.into()
+        sqrt_iterations: 10.into(),
     };
 
     let np = Signal::derive(move || {
@@ -140,14 +136,8 @@ pub fn App() -> impl IntoView {
 
     view! {
         <div class="px-2 flex flex-col">
-            <p class="text-center mb-2 text-3xl font-bold">
-                <span class="text-red-500">
-                    Small Disclaimer:
-                </span>
-                {"These algorithms are not optimized."}
-            </p>
             <p class="text-center mb-2 text-xl">
-                Link to source code(only for brave hearts):
+                "Github: "
                 <a
                     class="text-blue-700"
                     href="https://github.com/PalaBeaveR/bernoulli_vs_moivre_laplace"
@@ -157,51 +147,23 @@ pub fn App() -> impl IntoView {
             </p>
             <Variables variables/>
             <DerivedVariables variables=derived_variables/>
-            <div>
-                <input
-                    type="checkbox"
-                    id="automaticiterations"
-                    prop:checked=variables.automatic_iterations
-                    on:input=move |ev| {
-                        variables
-                            .automatic_iterations
-                            .set(event_target::<HtmlInputElement>(&ev).checked())
-                    }
-                />
-
-                <label for="automaticiterations">
-                    Automatic Iterations
-                </label>
-            </div>
-            <p>
-                {"Automatic iterations allow the algorithm to infer if it should continue iterating the exponent taylor series during calculation so that you don't get nonsensical results and then realize that you needed a bigger iteration number.(performance affected by precision variable)"}
-            </p>
             <button
                 on:click=move |_| {
                     let request = SolverRequest {
                         total: variables.total_experiments.get_untracked(),
                         required: variables.required_to_pass.get_untracked(),
-                        odds: (
-                            variables.pass_numerator.get_untracked(),
-                            variables.denominator.get_untracked(),
+                        odds: Ratio::new_raw(
+                            variables.pass_numerator.get_untracked().into(),
+                            variables.denominator.get_untracked().into(),
                         ),
                         precision: variables.precision.get_untracked(),
                         iterations: variables.iterations.get_untracked(),
                         stable_amount: variables.stable_amount.get_untracked(),
                         sqrt_iterations: variables.sqrt_iterations.get_untracked(),
-
                     };
                     bernoulli_solver.send(request.clone());
                     set_bernoulli_running(true);
-                    moivre_laplace_solver
-                        .send((
-                            if variables.automatic_iterations.get_untracked() {
-                                MoivreLaplaceMode::AutomaticIterations
-                            } else {
-                                MoivreLaplaceMode::Normal
-                            },
-                            request,
-                        ));
+                    moivre_laplace_solver.send(request);
                     set_moivre_laplace_running(true);
                 }
 
@@ -209,10 +171,6 @@ pub fn App() -> impl IntoView {
             >
                 Calculate
             </button>
-            <p>
-                Iterations done(moivre laplace):
-                {iterations_done}
-            </p>
             <div class="grid grid-cols-2 child:border-2 child:border-black gap-2 p-2 child:rounded child:grow child:p-2">
                 <ResultDisplay
                     precision=variables.precision
@@ -239,10 +197,10 @@ pub struct Variables {
     pub pass_numerator: RwSignal<u32>,
     pub fail_numerator: RwSignal<u32>,
     pub precision: RwSignal<usize>,
-    pub iterations: RwSignal<u32>,
+    pub iterations: RwSignal<usize>,
     pub stable_amount: RwSignal<usize>,
     pub automatic_iterations: RwSignal<bool>,
-    pub sqrt_iterations: RwSignal<usize>
+    pub sqrt_iterations: RwSignal<usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -305,14 +263,16 @@ fn Variables(variables: Variables) -> impl IntoView {
             <Variable
                 value=variables.precision
                 id="precision"
-                label="Precision(Numbers after the dot in the result)"
+                label="Precision"
+                tooltip="Numbers after the dot in the result"
                 block=true
             />
 
             <Variable
                 value=variables.sqrt_iterations
                 id="sqrt"
-                label="Sqrt Iterations(exponential time to compute)"
+                label="Sqrt Iterations"
+                tooltip="exponential time to compute"
                 block=true
             />
 
@@ -322,7 +282,8 @@ fn Variables(variables: Variables) -> impl IntoView {
                         <Variable
                             value=variables.stable_amount
                             id="stableamount"
-                            label="Stable Number Amount(Only for moivre laplace. Affects how many first non-zero digits need to be the same from the previous iteration)"
+                            label="Stable Number Amount"
+                            tooltip="Only for moivre laplace. Affects how many first non-zero digits need to be the same from the previous iteration"
                             block=true
                         />
                     }
@@ -331,7 +292,8 @@ fn Variables(variables: Variables) -> impl IntoView {
                         <Variable
                             value=variables.iterations
                             id="iterations"
-                            label="Exponent Iterations(only affects moivre laplace. Bigger is slower but more accurate)"
+                            label="Exponent Iterations"
+                            tooltip="only affects moivre laplace. Bigger is slower but more accurate"
                             block=true
                         />
                     }
@@ -349,13 +311,22 @@ pub fn DerivedVariable<N>(
     #[prop(into)] value: Signal<N>,
     #[prop(optional)] id: Option<&'static str>,
     #[prop(optional)] label: Option<&'static str>,
+    #[prop(optional)] tooltip: Option<&'static str>,
     #[prop(optional)] block: bool,
 ) -> impl IntoView
 where
     N: Clone + IntoView + 'static,
 {
     let variable = view! {
-        {label.map(|label| view! { <label for=id>{label}</label> }).collect_view()}
+        {label
+            .map(|label| {
+                view! {
+                    <label for=id>
+                        <span title=tooltip>{label}</span>
+                    </label>
+                }
+            })
+            .collect_view()}
         <div id=id class="border-2 text-center rounded py-1">
 
             {move || value.get()}
@@ -374,6 +345,7 @@ pub fn Variable<N>(
     value: RwSignal<N>,
     #[prop(optional)] id: Option<&'static str>,
     #[prop(optional)] label: Option<&'static str>,
+    #[prop(optional)] tooltip: Option<&'static str>,
     #[prop(optional)] block: bool,
 ) -> impl IntoView
 where
@@ -381,7 +353,15 @@ where
 {
     use web_sys::HtmlDivElement;
     let variable = view! {
-        {label.map(|label| view! { <label for=id>{label}</label> }).collect_view()}
+        {label
+            .map(|label| {
+                view! {
+                    <label for=id>
+                        <span title=tooltip>{label}</span>
+                    </label>
+                }
+            })
+            .collect_view()}
         <div
             contenteditable
             id=id
@@ -423,10 +403,11 @@ pub fn FractionVariable(
     numerator: RwSignal<u32>,
     denominator: RwSignal<u32>,
     #[prop(optional)] label: Option<&'static str>,
+    #[prop(optional)] tooltip: Option<&'static str>,
     #[prop(optional)] block: bool,
 ) -> impl IntoView {
     let variable = view! {
-        {label.map(|label| view! { <p>{label}</p> })}
+        {label.map(|label| view! { <span title=tooltip>{label}</span> })}
         <div class="flex flex-col items-center child:w-full w-min">
             <Variable value=numerator/>
             <hr class="my-1 h-[2px] bg-black"/>
